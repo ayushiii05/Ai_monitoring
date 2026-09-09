@@ -1,0 +1,169 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch or PR to conserve CI resources
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================
+  # 1. Continuous Integration: Backend
+  # ==========================================
+  backend-ci:
+    name: Backend CI (Test & Check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: property-market-monitor/backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: property-market-monitor/backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        env:
+          NODE_ENV: test
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://mock-ci-project.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'mock-ci-service-role-key' }}
+        run: npm test
+
+  # ==========================================
+  # 2. Continuous Integration: Frontend
+  # ==========================================
+  frontend-ci:
+    name: Frontend CI (Lint & Build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: property-market-monitor/frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: property-market-monitor/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run code linter
+        run: npm run lint
+
+      - name: Build production bundle
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'http://localhost:5001/api' }}
+        run: npm run build
+
+      - name: Upload frontend build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: property-market-monitor/frontend/dist
+          retention-days: 7
+
+  # ==========================================
+  # 3. Continuous Deployment: Backend to Render
+  # ==========================================
+  deploy-backend:
+    name: Deploy Backend (Render)
+    needs: backend-ci
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Render Deploy Hook
+        if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          echo "Triggering backend deployment on Render..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$RENDER_DEPLOY_HOOK_URL")
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Render deploy hook triggered successfully! (HTTP $HTTP_STATUS)"
+          else
+            echo "Failed to trigger Render deploy hook. (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
+
+      - name: Notice if Render secret is missing
+        if: ${{ env.RENDER_DEPLOY_HOOK_URL == '' }}
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          echo "::warning ::RENDER_DEPLOY_HOOK_URL secret not configured in GitHub Secrets. Skipping Render deploy step."
+
+  # ==========================================
+  # 4. Continuous Deployment: Frontend to Vercel
+  # ==========================================
+  deploy-frontend:
+    name: Deploy Frontend (Vercel)
+    needs: [frontend-ci, deploy-backend]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: property-market-monitor/frontend
+
+    steps:
+      - name: Checkout repository
+        if: ${{ env.VERCEL_TOKEN != '' || env.VERCEL_DEPLOY_HOOK_URL != '' }}
+        uses: actions/checkout@v4
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+
+      # Option A: Deploy using Vercel Action (CLI)
+      - name: Deploy to Vercel via CLI Action
+        if: ${{ env.VERCEL_TOKEN != '' }}
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: property-market-monitor/frontend
+          vercel-args: '--prod'
+
+      # Option B: Deploy using Vercel Deploy Hook (if token is not provided but deploy hook is)
+      - name: Deploy to Vercel via Deploy Hook
+        if: ${{ env.VERCEL_TOKEN == '' && env.VERCEL_DEPLOY_HOOK_URL != '' }}
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          echo "Triggering frontend deployment on Vercel via Deploy Hook..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$VERCEL_DEPLOY_HOOK_URL")
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Vercel deploy hook triggered successfully! (HTTP $HTTP_STATUS)"
+          else
+            echo "Failed to trigger Vercel deploy hook. (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
+
+      - name: Notice if Vercel credentials missing
+        if: ${{ env.VERCEL_TOKEN == '' && env.VERCEL_DEPLOY_HOOK_URL == '' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          echo "::warning ::Neither VERCEL_TOKEN nor VERCEL_DEPLOY_HOOK_URL configured in GitHub Secrets. Skipping Vercel deploy step."

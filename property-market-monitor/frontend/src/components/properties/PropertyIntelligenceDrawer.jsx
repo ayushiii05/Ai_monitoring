@@ -107,7 +107,6 @@ const PropertyIntelligenceDrawer = ({ property, onClose }) => {
                     <div key={i.id} className="bg-white border-l-4 border-indigo-500 shadow-sm rounded-r-lg p-4">
                       <div className="flex justify-between items-start">
                         <h4 className="font-semibold text-gray-900">{i.title}</h4>
-                        <span className="text-xs font-medium bg-gray-100 text-gray-800 px-2 py-1 rounded">Conf: {i.confidence}%</span>
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{i.summary}</p>
                     </div>

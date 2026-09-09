@@ -216,9 +216,6 @@ const AIInsightsList = () => {
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase border ${getTypeBadge(insight.insight_type)}`}>
                       {insight.insight_type.replace('_', ' ')}
                     </span>
-                    <span className="text-xs font-semibold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
-                      {Math.round(insight.confidence <= 1 ? insight.confidence * 100 : insight.confidence)}% Confidence
-                    </span>
                   </div>
                 </div>
                 

@@ -153,9 +153,6 @@ const SuburbIntelligence = () => {
                 <div key={insight.id} className="border border-gray-200 rounded-lg p-4 shadow-sm bg-gray-50">
                   <div className="flex justify-between items-start mb-2">
                     <h4 className="font-medium text-indigo-900">{insight.title}</h4>
-                    <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full font-medium">
-                      {insight.confidence <= 1 ? Math.round(insight.confidence * 100) : insight.confidence}% Confidence
-                    </span>
                   </div>
                   <p className="text-sm text-gray-700">{insight.summary}</p>
                 </div>

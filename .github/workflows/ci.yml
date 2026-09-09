@@ -165,5 +165,6 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        working-directory: .
         run: |
           echo "::warning ::Neither VERCEL_TOKEN nor VERCEL_DEPLOY_HOOK_URL configured in GitHub Secrets. Skipping Vercel deploy step."

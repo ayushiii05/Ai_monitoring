@@ -122,17 +122,13 @@ jobs:
     needs: [frontend-ci, deploy-backend]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: property-market-monitor/frontend
 
     steps:
       - name: Checkout repository
-        if: ${{ env.VERCEL_TOKEN != '' || env.VERCEL_DEPLOY_HOOK_URL != '' }}
+        if: ${{ env.VERCEL_TOKEN != '' }}
         uses: actions/checkout@v4
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
 
       # Option A: Deploy using Vercel Action (CLI)
       - name: Deploy to Vercel via CLI Action

@@ -7,13 +7,22 @@ const router = express.Router();
 router.get('/analytics/overview', async (req, res) => {
   try {
     // 1. Total monitored listings
-    const { count: totalMonitored } = await supabase
+    let totalMonitored = 0;
+    const { count: configCount, error: configError } = await supabase
       .from('monitoring_config')
       .select('*', { count: 'exact', head: true })
       .eq('monitoring_enabled', true);
 
+    if (configError || !configCount) {
+      const { count: propCount } = await supabase
+        .from('properties')
+        .select('id', { count: 'exact', head: true });
+      totalMonitored = propCount || 0;
+    } else {
+      totalMonitored = configCount || 0;
+    }
+
     // 2. Active, Sold, Under Offer, Withdrawn counts
-    // We get these from the properties table
     const { data: propertiesStatus } = await supabase
       .from('properties')
       .select('status');
@@ -33,25 +42,47 @@ router.get('/analytics/overview', async (req, res) => {
       });
     }
 
-    // 3. New listings, Price reductions, Price increases (from market_events in last 30 days)
+    // If status counts were not populated from strings, derive from events
+    if (activeCount === 0 && soldCount === 0) {
+      try {
+        const { count: soldEvCount } = await supabase
+          .from('events')
+          .select('*', { count: 'exact', head: true })
+          .eq('event_type', 'SOLD');
+        soldCount = soldEvCount || 0;
+      } catch (e) {
+        soldCount = 0;
+      }
+      activeCount = Math.max(0, totalMonitored - soldCount);
+    }
+
+    // 3. New listings, Price reductions, Price increases
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const { data: recentEvents } = await supabase
-      .from('market_events')
-      .select('event_type, metadata')
-      .gte('created_at', thirtyDaysAgo.toISOString());
 
     let newListings = 0;
     let priceReductions = 0;
     let priceIncreases = 0;
 
+    let { data: recentEvents, error: eventErr } = await supabase
+      .from('market_events')
+      .select('event_type, metadata')
+      .gte('created_at', thirtyDaysAgo.toISOString());
+
+    if (eventErr || !recentEvents) {
+      const { data: fallbackEvents } = await supabase
+        .from('events')
+        .select('event_type, payload')
+        .gte('detected_at', thirtyDaysAgo.toISOString());
+      recentEvents = fallbackEvents || [];
+    }
+
     if (recentEvents) {
       recentEvents.forEach(e => {
         if (e.event_type === 'NEW_LISTING') newListings++;
         if (e.event_type === 'PRICE_CHANGED') {
-          if (e.metadata?.trend === 'reduced') priceReductions++;
-          if (e.metadata?.trend === 'increased') priceIncreases++;
+          if (e.metadata?.trend === 'reduced' || e.payload?.trend === 'reduced') priceReductions++;
+          if (e.metadata?.trend === 'increased' || e.payload?.trend === 'increased') priceIncreases++;
         }
       });
     }
@@ -85,23 +116,34 @@ router.get('/analytics/activity', async (req, res) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const { data: events, error } = await supabase
+    let { data: events, error } = await supabase
       .from('market_events')
       .select('event_type, created_at')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: true });
 
-    if (error) throw error;
+    if (error || !events) {
+      const { data: fallbackEvents } = await supabase
+        .from('events')
+        .select('event_type, detected_at')
+        .gte('detected_at', startDate.toISOString())
+        .order('detected_at', { ascending: true });
+
+      events = (fallbackEvents || []).map(e => ({
+        event_type: e.event_type,
+        created_at: e.detected_at
+      }));
+    }
 
     // Group events by date (or hour if 24h)
     const grouped = {};
-    events.forEach(e => {
+    (events || []).forEach(e => {
       let key;
       const d = new Date(e.created_at);
       if (days === 1) {
-        key = `${d.getHours()}:00`; // Group by hour
+        key = `${d.getHours()}:00`;
       } else {
-        key = d.toISOString().split('T')[0]; // Group by date
+        key = d.toISOString().split('T')[0];
       }
       
       if (!grouped[key]) {

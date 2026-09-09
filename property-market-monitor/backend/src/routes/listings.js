@@ -3,6 +3,35 @@ import { supabase } from '../services/supabaseClient.js';
 
 const router = express.Router();
 
+// Helper to fetch any properties marked as SOLD in the events table
+async function getSoldPropertyIds() {
+  try {
+    const { data } = await supabase
+      .from('events')
+      .select('property_id')
+      .eq('event_type', 'SOLD');
+    return new Set((data || []).map(e => e.property_id));
+  } catch (err) {
+    return new Set();
+  }
+}
+
+// Derive a reliable status for a property
+function resolvePropertyStatus(property, soldPropertyIds = new Set()) {
+  if (property.status) return property.status;
+  const priceStr = (property.price || '').toLowerCase();
+  if (soldPropertyIds.has(property.id) || priceStr.includes('sold')) {
+    return 'sold';
+  }
+  if (priceStr.includes('under offer') || priceStr.includes('contract')) {
+    return 'under offer';
+  }
+  if (priceStr.includes('withdrawn') || priceStr.includes('off market')) {
+    return 'withdrawn';
+  }
+  return 'active';
+}
+
 router.get('/listings', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -26,8 +55,14 @@ router.get('/listings', async (req, res) => {
 
     if (error) throw error;
 
+    const soldIds = await getSoldPropertyIds();
+    const enrichedData = (data || []).map(p => ({
+      ...p,
+      status: resolvePropertyStatus(p, soldIds)
+    }));
+
     res.json({
-      data,
+      data: enrichedData,
       total: count || 0,
       page,
       limit
@@ -59,7 +94,11 @@ router.get('/listings/:id', async (req, res) => {
       if (error.code === 'PGRST116') return res.status(404).json({ detail: 'Listing not found' });
       throw error;
     }
-    res.json(data);
+    const soldIds = await getSoldPropertyIds();
+    res.json({
+      ...data,
+      status: resolvePropertyStatus(data, soldIds)
+    });
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
@@ -103,10 +142,28 @@ router.get('/listings/:id/status-history', async (req, res) => {
       .eq('listing_id', req.params.id)
       .order('detected_at', { ascending: false });
 
-    if (error) throw error;
-    res.json(data);
+    if (!error && data && data.length > 0) {
+      return res.json(data);
+    }
+
+    // Fallback to events table for this property
+    const { data: eventData } = await supabase
+      .from('events')
+      .select('*')
+      .eq('property_id', req.params.id)
+      .order('detected_at', { ascending: false });
+
+    const statusHistory = (eventData || []).map(e => ({
+      id: e.id,
+      listing_id: e.property_id,
+      old_status: e.payload?.old_status || (e.event_type === 'NEW_LISTING' ? 'None' : 'Active'),
+      new_status: e.payload?.new_status || (e.event_type === 'SOLD' ? 'Sold' : 'Active'),
+      detected_at: e.detected_at
+    }));
+
+    res.json(statusHistory);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    res.json([]);
   }
 });
 

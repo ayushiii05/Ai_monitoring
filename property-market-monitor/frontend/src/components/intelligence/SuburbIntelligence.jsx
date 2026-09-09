@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { listingsApi } from '../../services/api';
-import { fetchAIInsights as fetchInsights } from '../../services/aiService';
+import { fetchAIInsights as fetchInsights, fetchSuburbIntelligence } from '../../services/aiService';
 import { MapPin, TrendingUp, DollarSign, Activity } from 'lucide-react';
 
 const SuburbIntelligence = () => {
@@ -36,8 +36,17 @@ const SuburbIntelligence = () => {
       
       listings.forEach(l => {
         const s = (l.status || '').toLowerCase();
-        if (s.includes('active') || s.includes('current')) active++;
-        if (s.includes('sold')) sold++;
+        const p = (l.price || '').toLowerCase();
+
+        if (s.includes('sold') || p.includes('sold')) {
+          sold++;
+        } else if (s.includes('withdrawn') || s.includes('off market') || p.includes('withdrawn')) {
+          // Withdrawn / off market
+        } else {
+          // Any currently monitored listing without a sold flag is an active listing
+          active++;
+        }
+
         if (l.price_numeric) prices.push(l.price_numeric);
       });
 
@@ -54,10 +63,20 @@ const SuburbIntelligence = () => {
 
       // Fetch AI Insights for suburb
       const allInsights = await fetchInsights();
-      const suburbInsights = allInsights.filter(i => 
+      let suburbInsights = allInsights.filter(i => 
         (i.suburb && i.suburb.toLowerCase() === suburb.toLowerCase()) || 
         (i.properties && i.properties.suburb_name?.toLowerCase() === suburb.toLowerCase())
       );
+
+      if (suburbInsights.length === 0) {
+        try {
+          const direct = await fetchSuburbIntelligence(suburb);
+          if (Array.isArray(direct) && direct.length > 0) {
+            suburbInsights = direct;
+          }
+        } catch (e) {}
+      }
+
       setInsights(suburbInsights);
       
     } catch (err) {
@@ -135,7 +154,7 @@ const SuburbIntelligence = () => {
                   <div className="flex justify-between items-start mb-2">
                     <h4 className="font-medium text-indigo-900">{insight.title}</h4>
                     <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full font-medium">
-                      {insight.confidence}% Confidence
+                      {insight.confidence <= 1 ? Math.round(insight.confidence * 100) : insight.confidence}% Confidence
                     </span>
                   </div>
                   <p className="text-sm text-gray-700">{insight.summary}</p>

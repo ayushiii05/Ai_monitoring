@@ -9,6 +9,7 @@ import alertsRouter from './routes/alerts.js';
 import analyticsRouter from './routes/analytics.js';
 import { MonitoringEngine } from './market_data/engine.js';
 
+dotenv.config();
 dotenv.config({ path: '../.env' }); // Load .env from root
 
 const app = express();

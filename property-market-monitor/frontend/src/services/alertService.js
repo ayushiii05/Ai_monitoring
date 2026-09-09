@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 export const fetchAlerts = async () => {
   const response = await axios.get(`${API_URL}/alerts`);
@@ -14,5 +14,10 @@ export const fetchUnreadAlerts = async () => {
 
 export const markAlertAsRead = async (id) => {
   const response = await axios.patch(`${API_URL}/alerts/${id}/read`);
+  return response.data;
+};
+
+export const markAllAlertsAsRead = async () => {
+  const response = await axios.patch(`${API_URL}/alerts/read-all`);
   return response.data;
 };

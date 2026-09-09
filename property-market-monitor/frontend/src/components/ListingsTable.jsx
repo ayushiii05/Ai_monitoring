@@ -2,13 +2,32 @@ import React, { useState } from 'react';
 import { Home, Filter, Search, ChevronLeft, ChevronRight, MapPin, Bed, Bath, Car, Calendar, ExternalLink, ShieldAlert } from 'lucide-react';
 import PropertyIntelligenceDrawer from './properties/PropertyIntelligenceDrawer';
 
-const ListingsTable = ({ listings, loading, page, total, limit, setPage }) => {
+const ListingsTable = ({ listings, loading, error, onRetry, page, total, limit, setPage }) => {
   const [selectedProperty, setSelectedProperty] = useState(null);
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-red-200">
+        <ShieldAlert className="mx-auto h-12 w-12 text-red-500" />
+        <h3 className="mt-2 text-sm font-medium text-gray-900">Failed to load properties</h3>
+        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p className="mt-1 text-xs text-gray-400">Make sure the backend server is running on http://localhost:5001</p>
+        {onRetry && (
+          <button 
+            onClick={onRetry} 
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+          >
+            Retry
+          </button>
+        )}
       </div>
     );
   }

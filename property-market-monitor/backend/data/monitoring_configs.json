@@ -1,0 +1,27 @@
+{
+  "2962": {
+    "listing_id": 2962,
+    "monitoring_enabled": true,
+    "monitoring_frequency": "daily",
+    "last_checked_at": "2026-09-10T03:03:49.132Z",
+    "next_check_at": "2026-09-11T02:38:49.132Z",
+    "last_sync_status": "success"
+  },
+  "2978": {
+    "listing_id": 2978,
+    "monitoring_enabled": true,
+    "monitoring_frequency": "daily",
+    "last_checked_at": "2026-09-10T03:03:11.002Z",
+    "next_check_at": "2026-09-11T02:38:11.002Z",
+    "last_sync_status": "success"
+  },
+  "2981": {
+    "listing_id": 2981,
+    "monitoring_enabled": false,
+    "monitoring_frequency": "daily",
+    "last_checked_at": "2026-09-10T02:55:18.788Z",
+    "next_check_at": "2026-09-11T02:30:18.788Z",
+    "last_sync_status": "success",
+    "updated_at": "2026-09-10T03:37:52.762Z"
+  }
+}

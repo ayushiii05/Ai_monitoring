@@ -1,5 +1,6 @@
 import express from 'express';
 import { supabase } from '../services/supabaseClient.js';
+import { monitoringConfigStore } from '../services/monitoringConfigStore.js';
 
 const router = express.Router();
 
@@ -121,16 +122,72 @@ router.get('/listings/:id/history', async (req, res) => {
 
 router.get('/listings/:id/price-history', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('listing_price_history')
       .select('*')
       .eq('listing_id', req.params.id)
       .order('detected_at', { ascending: false });
 
-    if (error) throw error;
-    res.json(data);
+    if (!error && data && data.length > 0) {
+      return res.json(data);
+    }
+
+    // Fallback: Query events table for price changes / listings
+    const { data: eventData } = await supabase
+      .from('events')
+      .select('*')
+      .eq('property_id', req.params.id)
+      .order('detected_at', { ascending: false });
+
+    const priceEvents = (eventData || []).filter(e => 
+      e.payload?.old_price || e.payload?.new_price || e.payload?.price || e.event_type === 'RELISTED' || e.event_type === 'NEW_LISTING'
+    );
+
+    if (priceEvents.length > 0) {
+      const formatted = priceEvents.map(e => {
+        const oldP = e.payload?.old_price || e.payload?.price || null;
+        const newP = e.payload?.new_price || e.payload?.price || oldP;
+        const change = (oldP && newP && oldP !== newP) ? (newP - oldP) : (e.payload?.change_amount || 0);
+        const changePct = oldP && change ? Number(((change / oldP) * 100).toFixed(2)) : (e.payload?.change_percentage || 0);
+        return {
+          id: e.id,
+          listing_id: Number(req.params.id),
+          old_price: oldP,
+          new_price: newP,
+          change_amount: change,
+          change_percentage: changePct,
+          detected_at: e.detected_at
+        };
+      });
+      return res.json(formatted);
+    }
+
+    // Baseline from property record if no historical adjustments exist
+    const { data: propData } = await supabase
+      .from('properties')
+      .select('id, price_numeric, price, created_at')
+      .eq('id', req.params.id)
+      .single();
+
+    if (propData && (propData.price_numeric || propData.price)) {
+      const priceNum = propData.price_numeric || parseInt(String(propData.price).replace(/[^0-9]/g, ''), 10) || null;
+      if (priceNum) {
+        return res.json([{
+          id: `initial-${propData.id}`,
+          listing_id: propData.id,
+          old_price: priceNum,
+          new_price: priceNum,
+          change_amount: 0,
+          change_percentage: 0,
+          detected_at: propData.created_at || new Date().toISOString()
+        }]);
+      }
+    }
+
+    res.json([]);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    console.error('Error fetching price history:', error);
+    res.json([]);
   }
 });
 
@@ -153,15 +210,35 @@ router.get('/listings/:id/status-history', async (req, res) => {
       .eq('property_id', req.params.id)
       .order('detected_at', { ascending: false });
 
-    const statusHistory = (eventData || []).map(e => ({
-      id: e.id,
-      listing_id: e.property_id,
-      old_status: e.payload?.old_status || (e.event_type === 'NEW_LISTING' ? 'None' : 'Active'),
-      new_status: e.payload?.new_status || (e.event_type === 'SOLD' ? 'Sold' : 'Active'),
-      detected_at: e.detected_at
-    }));
+    if (eventData && eventData.length > 0) {
+      const statusHistory = eventData.map(e => ({
+        id: e.id,
+        listing_id: Number(req.params.id),
+        old_status: e.payload?.old_status || (e.event_type === 'NEW_LISTING' ? 'Unlisted' : 'Active'),
+        new_status: e.payload?.new_status || (e.event_type === 'SOLD' ? 'Sold' : 'Active'),
+        detected_at: e.detected_at
+      }));
+      return res.json(statusHistory);
+    }
 
-    res.json(statusHistory);
+    // Baseline from property status
+    const { data: propData } = await supabase
+      .from('properties')
+      .select('id, created_at')
+      .eq('id', req.params.id)
+      .single();
+
+    if (propData) {
+      return res.json([{
+        id: `initial-${propData.id}`,
+        listing_id: propData.id,
+        old_status: 'Unlisted',
+        new_status: 'Active',
+        detected_at: propData.created_at || new Date().toISOString()
+      }]);
+    }
+
+    res.json([]);
   } catch (error) {
     res.json([]);
   }
@@ -175,29 +252,37 @@ router.get('/listings/:id/monitoring', async (req, res) => {
       .eq('listing_id', req.params.id)
       .single();
 
-    if (error && error.code !== 'PGRST116') throw error;
-    res.json(data || null);
+    if (!error && data) {
+      return res.json(data);
+    }
+
+    const config = monitoringConfigStore.getConfig(req.params.id);
+    res.json(config);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    const config = monitoringConfigStore.getConfig(req.params.id);
+    res.json(config);
   }
 });
 
 router.post('/listings/:id/monitoring', async (req, res) => {
   try {
     const payload = {
-      listing_id: req.params.id,
+      listing_id: Number(req.params.id),
       monitoring_enabled: req.body.monitoring_enabled !== undefined ? req.body.monitoring_enabled : true,
       monitoring_frequency: req.body.monitoring_frequency || 'daily'
     };
 
-    const { data, error } = await supabase
-      .from('monitoring_config')
-      .upsert(payload, { onConflict: 'listing_id' })
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('monitoring_config')
+        .upsert(payload, { onConflict: 'listing_id' })
+        .select()
+        .single();
+      if (!error && data) return res.json(data);
+    } catch (e) {}
 
-    if (error) throw error;
-    res.json(data);
+    const updated = monitoringConfigStore.updateConfig(req.params.id, payload);
+    res.json(updated);
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
@@ -209,22 +294,18 @@ router.patch('/listings/:id/monitoring', async (req, res) => {
     if (req.body.monitoring_enabled !== undefined) payload.monitoring_enabled = req.body.monitoring_enabled;
     if (req.body.monitoring_frequency !== undefined) payload.monitoring_frequency = req.body.monitoring_frequency;
 
-    if (Object.keys(payload).length === 0) {
-      return res.status(400).json({ detail: 'No valid fields provided' });
-    }
+    try {
+      const { data, error } = await supabase
+        .from('monitoring_config')
+        .update(payload)
+        .eq('listing_id', req.params.id)
+        .select()
+        .single();
+      if (!error && data) return res.json(data);
+    } catch (e) {}
 
-    const { data, error } = await supabase
-      .from('monitoring_config')
-      .update(payload)
-      .eq('listing_id', req.params.id)
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') return res.status(404).json({ detail: 'Monitoring config not found' });
-      throw error;
-    }
-    res.json(data);
+    const updated = monitoringConfigStore.updateConfig(req.params.id, payload);
+    res.json(updated);
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }

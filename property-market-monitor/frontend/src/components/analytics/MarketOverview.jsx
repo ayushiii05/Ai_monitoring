@@ -37,7 +37,7 @@ const MarketOverview = () => {
       </div>
       <div>
         <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className="text-2xl font-bold text-gray-900">{value.toLocaleString()}</p>
+        <p className="text-2xl font-bold text-gray-900">{typeof value === 'number' ? value.toLocaleString('en-AU') : (value ?? 0)}</p>
         {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
       </div>
     </div>

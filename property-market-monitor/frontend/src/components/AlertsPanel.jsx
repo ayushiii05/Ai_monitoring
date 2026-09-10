@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchAlerts, markAlertAsRead, markAllAlertsAsRead } from '../services/alertService';
 import { Bell, AlertTriangle, ArrowDown, ArrowUp, Info, CheckCircle, CheckCheck, Home, RefreshCw, Filter } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { safeTimeAgo } from '../utils/dateUtils';
 
 const AlertsPanel = () => {
   const [alerts, setAlerts] = useState([]);
@@ -222,7 +222,7 @@ const AlertsPanel = () => {
                         </h4>
                       </div>
                       <span className="text-xs text-gray-400 whitespace-nowrap">
-                        {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
+                        {safeTimeAgo(alert.created_at || alert.detected_at)}
                       </span>
                     </div>
                     

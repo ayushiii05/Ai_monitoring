@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Home, Filter, Search, ChevronLeft, ChevronRight, MapPin, Bed, Bath, Car, Calendar, ExternalLink, ShieldAlert } from 'lucide-react';
 import PropertyIntelligenceDrawer from './properties/PropertyIntelligenceDrawer';
 
-const ListingsTable = ({ listings, loading, error, onRetry, page, total, limit, setPage }) => {
+const ListingsTable = ({ listings, loading, error, onRetry, onReset, page, total, limit, setPage }) => {
   const [selectedProperty, setSelectedProperty] = useState(null);
 
   if (loading) {
@@ -34,10 +34,20 @@ const ListingsTable = ({ listings, loading, error, onRetry, page, total, limit, 
 
   if (!listings || listings.length === 0) {
     return (
-      <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
-        <Home className="mx-auto h-12 w-12 text-gray-400" />
-        <h3 className="mt-2 text-sm font-medium text-gray-900">No properties found</h3>
-        <p className="mt-1 text-sm text-gray-500">Try adjusting your filters to see more results.</p>
+      <div className="text-center py-14 bg-white rounded-lg shadow-sm border border-gray-200">
+        <Home className="mx-auto h-12 w-12 text-gray-300" />
+        <h3 className="mt-2 text-base font-semibold text-gray-900">No properties found</h3>
+        <p className="mt-1 text-sm text-gray-500 max-w-sm mx-auto">
+          No listings match your current filter criteria. Try adjusting or clearing your filters.
+        </p>
+        {onReset && (
+          <button
+            onClick={onReset}
+            className="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 shadow-xs text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+          >
+            Reset Filters
+          </button>
+        )}
       </div>
     );
   }
@@ -57,53 +67,101 @@ const ListingsTable = ({ listings, loading, error, onRetry, page, total, limit, 
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {listings.map((property) => (
-              <tr 
-                key={property.id} 
-                className="hover:bg-indigo-50 transition-colors cursor-pointer"
-                onClick={() => {
-                  const slugify = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-                  const addressPart = slugify(property.street_address || property.address);
-                  const suburbPart = slugify(property.suburb_name);
-                  const statePart = slugify(property.state_code);
-                  const postcodePart = property.postcode || '';
-                  
+            {listings.map((property) => {
+              const formatPrice = (p) => {
+                if (p.price && p.price.trim() !== '' && p.price !== 'null') {
+                  return p.price;
+                }
+                if (p.price_numeric && p.price_numeric > 0) {
+                  return `$${Number(p.price_numeric).toLocaleString('en-AU')}`;
+                }
+                return 'Contact Agent';
+              };
+
+              const getExternalUrl = (p) => {
+                if (p.url && (p.url.startsWith('http://') || p.url.startsWith('https://')) && !p.url.includes('propradar.com.au')) {
+                  return p.url;
+                }
+                const slugify = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                const addressPart = slugify(p.street_address || p.address);
+                const suburbPart = slugify(p.suburb_name);
+                const isAct = p.state_code === 'ACT' || (!p.state_code && p.address?.toUpperCase().includes('ACT'));
+                
+                if (isAct) {
+                  const statePart = 'act';
+                  const postcodePart = p.postcode || '';
                   const slug = [addressPart, suburbPart, statePart, postcodePart].filter(Boolean).join('-');
-                  const allhomesUrl = `https://www.allhomes.com.au/${slug}`;
-                  window.open(allhomesUrl, '_blank');
-                }}
-              >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-16 w-24 bg-gray-100 rounded-md overflow-hidden">
-                      {property.property_images && property.property_images.length > 0 ? (
-                        <img className="h-16 w-24 object-cover" src={property.property_images[0].url} alt="" />
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-gray-400"><Home size={20} /></div>
+                  return slug ? `https://www.allhomes.com.au/${slug}` : null;
+                }
+
+                const fullSearch = `${p.street_address || p.address || ''}, ${p.suburb_name || ''} ${p.state_code || ''}`.trim();
+                return `https://www.domain.com.au/search-result?search=${encodeURIComponent(fullSearch)}`;
+              };
+
+              const externalUrl = getExternalUrl(property);
+              const hasImage = property.property_images && property.property_images.length > 0 && property.property_images[0].url;
+
+              return (
+                <tr 
+                  key={property.id} 
+                  className="hover:bg-indigo-50/60 transition-colors cursor-pointer"
+                  onClick={() => setSelectedProperty(property)}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 h-16 w-24 bg-gray-100 rounded-md overflow-hidden border border-gray-200">
+                        {hasImage ? (
+                          <img 
+                            className="h-16 w-24 object-cover" 
+                            src={property.property_images[0].url} 
+                            alt={property.street_address || property.address || ''} 
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-gray-400 bg-gray-50">
+                            <Home size={20} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-4">
+                        <div className="text-sm font-semibold text-gray-900 truncate max-w-xs">{property.street_address || property.address}</div>
+                        <div className="text-xs text-gray-500 capitalize mt-0.5">{property.property_type || 'Property'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{property.suburb_name}</div>
+                    <div className="text-xs text-gray-500">{property.state_code} {property.postcode || ''}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center space-x-3 text-sm text-gray-600">
+                      <div className="flex items-center" title="Bedrooms"><Bed size={15} className="mr-1 text-gray-400" /> {property.bedrooms || '-'}</div>
+                      <div className="flex items-center" title="Bathrooms"><Bath size={15} className="mr-1 text-gray-400" /> {property.bathrooms || '-'}</div>
+                      <div className="flex items-center" title="Car Spaces"><Car size={15} className="mr-1 text-gray-400" /> {property.garages || '-'}</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-indigo-600">{formatPrice(property)}</span>
+                      {externalUrl && (
+                        <a
+                          href={externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Open source listing"
+                          className="text-gray-400 hover:text-indigo-600 ml-2 p-1.5 rounded-md hover:bg-gray-100 transition-colors inline-flex items-center"
+                        >
+                          <ExternalLink size={14} />
+                        </a>
                       )}
                     </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900 truncate max-w-xs">{property.street_address || property.address}</div>
-                      <div className="text-sm text-gray-500 capitalize">{property.property_type || 'Property'}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{property.suburb_name}</div>
-                  <div className="text-sm text-gray-500">{property.state_code} {property.postcode}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center space-x-3 text-sm text-gray-500">
-                    <div className="flex items-center" title="Bedrooms"><Bed size={16} className="mr-1" /> {property.bedrooms || '-'}</div>
-                    <div className="flex items-center" title="Bathrooms"><Bath size={16} className="mr-1" /> {property.bathrooms || '-'}</div>
-                    <div className="flex items-center" title="Car Spaces"><Car size={16} className="mr-1" /> {property.garages || '-'}</div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-semibold text-indigo-600">{property.price || (property.price_numeric ? `$${property.price_numeric.toLocaleString()}` : 'Price not specified')}</div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

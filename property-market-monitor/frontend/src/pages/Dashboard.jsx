@@ -86,14 +86,14 @@ const Dashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-6">
-      {/* Sticky Header & Tabs Bar */}
-      <div className="sticky top-0 bg-gray-50/95 z-20 pt-2 pb-4 mb-6 border-b border-gray-200 backdrop-blur-sm">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Property Market Monitor</h1>
-          <p className="mt-1 text-sm text-gray-500">Real-time 24/7 AI-powered market intelligence.</p>
-        </div>
+      {/* Page Title */}
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">Property Market Monitor</h1>
+        <p className="mt-1 text-sm text-gray-500">Real-time 24/7 AI-powered market intelligence.</p>
+      </div>
 
-        {/* Tabs */}
+      {/* Sticky Tabs Bar */}
+      <div className="sticky top-0 bg-gray-50/95 z-20 py-2 mb-6 border-b border-gray-200 backdrop-blur-sm">
         <div className="overflow-x-auto">
           <nav className="-mb-px flex space-x-8" aria-label="Tabs">
             {tabs.map((tab) => (
@@ -101,7 +101,7 @@ const Dashboard = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  whitespace-nowrap flex items-center py-2.5 px-1 border-b-2 font-medium text-sm transition-colors
+                  whitespace-nowrap flex items-center py-2 px-1 border-b-2 font-medium text-sm transition-colors
                   ${activeTab === tab.id 
                     ? 'border-indigo-500 text-indigo-600 font-semibold' 
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -138,6 +138,7 @@ const Dashboard = () => {
               loading={loading} 
               error={error}
               onRetry={fetchListings}
+              onReset={() => setFilters({ suburb: '', state: '', min_price: '', max_price: '', bedrooms: '', bathrooms: '' })}
               page={page} 
               total={total} 
               limit={limit} 

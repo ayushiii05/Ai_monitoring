@@ -4,6 +4,7 @@ import { GenericApiProvider } from './providers/GenericApiProvider.js';
 import { ApiNormalizer } from './normalizer/apiNormalizer.js';
 import { ChangeDetector } from './services/changeDetector.js';
 import { AlertEngine } from './services/alertEngine.js';
+import { monitoringConfigStore } from '../services/monitoringConfigStore.js';
 
 export class MonitoringEngine {
   constructor() {
@@ -43,34 +44,30 @@ export class MonitoringEngine {
   }
 
   async runCycle() {
-    console.log('[MonitoringEngine] Starting check cycle...');
     const now = new Date().toISOString();
 
-    // Query for due listings
-    const { data: configs, error } = await supabase
-      .from('monitoring_config')
-      .select('listing_id, monitoring_frequency')
-      .eq('monitoring_enabled', true)
-      .lte('next_check_at', now); // Wait, if it's null, we also want it.
+    let allConfigs = [];
+    try {
+      const { data: configs, error } = await supabase
+        .from('monitoring_config')
+        .select('listing_id, monitoring_frequency')
+        .eq('monitoring_enabled', true)
+        .lte('next_check_at', now);
 
-    if (error) {
-      console.error('[MonitoringEngine] Failed to fetch due configs:', error);
-      return;
+      if (!error && configs) {
+        const { data: nullConfigs } = await supabase
+          .from('monitoring_config')
+          .select('listing_id, monitoring_frequency')
+          .eq('monitoring_enabled', true)
+          .is('next_check_at', null);
+
+        allConfigs = [...configs, ...(nullConfigs || [])];
+      } else {
+        allConfigs = monitoringConfigStore.getDueConfigs(now);
+      }
+    } catch (e) {
+      allConfigs = monitoringConfigStore.getDueConfigs(now);
     }
-
-    const { data: nullConfigs, error: nullError } = await supabase
-      .from('monitoring_config')
-      .select('listing_id, monitoring_frequency')
-      .eq('monitoring_enabled', true)
-      .is('next_check_at', null);
-
-    if (nullError) {
-      console.error('[MonitoringEngine] Failed to fetch null configs:', nullError);
-      return;
-    }
-
-    // Combine configs and deduplicate just in case
-    const allConfigs = [...configs, ...nullConfigs];
     const uniqueListingIds = [...new Set(allConfigs.map(c => c.listing_id))];
 
     console.log(`[MonitoringEngine] Found ${uniqueListingIds.length} listings due for check.`);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { monitoringApi } from '../../services/api';
 import { Server, Activity, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { safeTimeAgo } from '../../utils/dateUtils';
 
 const MonitoringHealth = () => {
   const [status, setStatus] = useState(null);
@@ -85,7 +85,7 @@ const MonitoringHealth = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {log.completed_at ? formatDistanceToNow(new Date(log.completed_at), { addSuffix: true }) : 'N/A'}
+                      {safeTimeAgo(log.completed_at, 'N/A')}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
                       {log.error_message || '-'}

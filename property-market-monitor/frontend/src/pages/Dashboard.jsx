@@ -59,6 +59,18 @@ const Dashboard = () => {
     }
   }, [page, activeTab]);
 
+  // Automatically trigger search when filters change (with debounce)
+  useEffect(() => {
+    if (activeTab === 'properties') {
+      const timeoutId = setTimeout(() => {
+        if (page !== 1) setPage(1);
+        else fetchListings();
+      }, 500); // 500ms debounce
+      return () => clearTimeout(timeoutId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
+
   const handleSearch = () => {
     if (page !== 1) setPage(1);
     else fetchListings();

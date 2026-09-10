@@ -54,8 +54,6 @@ const ListingsTable = ({ listings, loading, error, onRetry, page, total, limit, 
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent/Source</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -63,7 +61,17 @@ const ListingsTable = ({ listings, loading, error, onRetry, page, total, limit, 
               <tr 
                 key={property.id} 
                 className="hover:bg-indigo-50 transition-colors cursor-pointer"
-                onClick={() => setSelectedProperty(property)}
+                onClick={() => {
+                  const slugify = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                  const addressPart = slugify(property.street_address || property.address);
+                  const suburbPart = slugify(property.suburb_name);
+                  const statePart = slugify(property.state_code);
+                  const postcodePart = property.postcode || '';
+                  
+                  const slug = [addressPart, suburbPart, statePart, postcodePart].filter(Boolean).join('-');
+                  const allhomesUrl = `https://www.allhomes.com.au/${slug}`;
+                  window.open(allhomesUrl, '_blank');
+                }}
               >
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
@@ -92,33 +100,7 @@ const ListingsTable = ({ listings, loading, error, onRetry, page, total, limit, 
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-semibold text-indigo-600">{property.price || (property.price_numeric ? `$${property.price_numeric.toLocaleString()}` : 'Contact Agent')}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{property.agent_name || property.agent_agency || 'Unknown Agent'}</div>
-                  <div className="text-xs text-gray-500 capitalize px-2 py-1 bg-gray-100 inline-block rounded mt-1">{property.source || 'Unknown Source'}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex justify-end gap-2 items-center">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setSelectedProperty(property); }}
-                      className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded-md flex items-center"
-                    >
-                      <ShieldAlert size={14} className="mr-1"/> Intelligence
-                    </button>
-                    {property.url && (
-                      <a 
-                        href={property.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-gray-500 hover:text-gray-700 inline-flex items-center ml-2"
-                        title="View Source"
-                      >
-                        <ExternalLink size={16} />
-                      </a>
-                    )}
-                  </div>
+                  <div className="text-sm font-semibold text-indigo-600">{property.price || (property.price_numeric ? `$${property.price_numeric.toLocaleString()}` : 'Price not specified')}</div>
                 </td>
               </tr>
             ))}

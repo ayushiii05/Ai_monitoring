@@ -112,16 +112,6 @@ const Filters = ({ filters, setFilters, onSearch }) => {
           </select>
         </div>
         
-        {/* Search Button */}
-        <div className="flex items-end lg:col-span-2">
-          <button
-            type="submit"
-            className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex justify-center items-center font-medium transition-colors"
-          >
-            <Search className="mr-2" size={18} />
-            Search Properties
-          </button>
-        </div>
       </div>
     </form>
   );
